@@ -135,14 +135,6 @@ export function useWebRTC() {
       setPairingCode(code);
       setStatus('waiting');
 
-      // If targeting a specific nearby device, push the code directly to them!
-      if (targetDeviceId && senderName) {
-        await fetch('/api/presence', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'push_code', targetId: targetDeviceId, code, senderName, fileCount: files.length })
-        });
-      }
 
       const pc = new RTCPeerConnection(ICE_SERVERS);
       pcRef.current = pc;
@@ -204,6 +196,15 @@ export function useWebRTC() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'offer', code, data: offer })
       });
+
+      // If targeting a specific nearby device, push the code directly to them AFTER the offer is uploaded!
+      if (targetDeviceId && senderName) {
+        await fetch('/api/presence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'push_code', targetId: targetDeviceId, code, senderName, fileCount: files.length })
+        });
+      }
 
       // Poll for Answer and Receiver Candidates
       let answerApplied = false;
@@ -320,8 +321,17 @@ export function useWebRTC() {
     try {
       const pRes = await fetch(`/api/signaling?code=${code}`);
       if (!pRes.ok) throw new Error('Invalid or expired code');
-      const session = await pRes.json();
-      if (!session.offer) throw new Error('No offer found');
+      let session = await pRes.json();
+
+      let retries = 0;
+      while (!session.offer && retries < 20) {
+        await new Promise(r => setTimeout(r, 500));
+        const retryRes = await fetch(`/api/signaling?code=${code}`);
+        if (retryRes.ok) session = await retryRes.json();
+        retries++;
+      }
+
+      if (!session.offer) throw new Error('No offer found. Sender might have disconnected.');
 
       const pc = new RTCPeerConnection(ICE_SERVERS);
       pcRef.current = pc;
