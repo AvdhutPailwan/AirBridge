@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sessions } from '@/lib/store';
+import { getSession, setSession } from '@/lib/store';
 
 export async function POST(request: Request) {
   try {
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     // Create a new session
     if (action === 'create') {
       const newCode = Math.floor(100000 + Math.random() * 900000).toString();
-      sessions.set(newCode, {
+      await setSession(newCode, {
         id: newCode,
         senderCandidates: [],
         receiverCandidates: [],
@@ -19,11 +19,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ code: newCode });
     }
     
-    if (!code || !sessions.has(code)) {
+    if (!code) {
+      return NextResponse.json({ error: 'Code is required' }, { status: 400 });
+    }
+
+    const session = await getSession(code);
+    
+    if (!session) {
       return NextResponse.json({ error: 'Session not found or expired' }, { status: 404 });
     }
-    
-    const session = sessions.get(code)!;
     
     if (action === 'offer') {
       session.offer = data;
@@ -38,6 +42,7 @@ export async function POST(request: Request) {
       }
     }
     
+    await setSession(code, session);
     return NextResponse.json({ success: true });
     
   } catch (error) {
@@ -49,9 +54,15 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
   
-  if (!code || !sessions.has(code)) {
+  if (!code) {
+    return NextResponse.json({ error: 'Code required' }, { status: 400 });
+  }
+  
+  const session = await getSession(code);
+  
+  if (!session) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
   
-  return NextResponse.json(sessions.get(code));
+  return NextResponse.json(session);
 }

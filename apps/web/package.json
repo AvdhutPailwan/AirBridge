@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@upstash/redis": "^1.39.0",
     "@workspace/ui": "*",
     "fflate": "^0.8.3",
     "lucide-react": "^1.48.0",
